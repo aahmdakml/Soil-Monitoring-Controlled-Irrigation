@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Watering System Dashboard</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- Top Bar -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <h1>Watering System</h1>
+      <p class="subtitle">Local IoT · ESP32 + Raspberry Pi</p>
+    </div>
+    <div class="topbar-right">
+      <span class="pill pill-soft" id="backend-status">● Connecting...</span>
+    </div>
+  </header>
+
+  <!-- Layout -->
+  <main class="layout">
+    <!-- Left column -->
+    <section class="column">
+      <!-- Overview card -->
+      <section class="card card-overview">
+        <div class="card-header">
+          <div>
+            <h2>Status Overview</h2>
+            <p class="card-subtitle">Quick glance of environment & devices</p>
+          </div>
+          <span class="pill pill-outline" id="overview-mode">Monitoring</span>
+        </div>
+
+        <div class="kpi-grid">
+          <!-- Humidity -->
+          <div class="kpi">
+            <div class="kpi-label">Humidity</div>
+            <div class="kpi-main">
+              <span class="kpi-value" id="humidity-value">-</span>
+              <span class="kpi-unit">%</span>
+            </div>
+            <div class="kpi-footer">
+              <span class="kpi-tag kpi-tag-info">Comfort range ~40–70%</span>
+            </div>
+          </div>
+
+          <!-- Soil Moisture -->
+          <div class="kpi">
+            <div class="kpi-label">Soil Moisture</div>
+            <div class="kpi-main">
+              <span class="kpi-value" id="soil-value">-</span>
+              <span class="kpi-unit">adc</span>
+            </div>
+            <div class="kpi-footer">
+              <span class="kpi-tag kpi-tag-info">Higher = wetter soil</span>
+            </div>
+          </div>
+
+          <!-- Light -->
+          <div class="kpi">
+            <div class="kpi-label">Light Intensity</div>
+            <div class="kpi-main">
+              <span class="kpi-value" id="light-value">-</span>
+              <span class="kpi-unit">adc</span>
+            </div>
+            <div class="kpi-footer">
+              <span class="kpi-tag kpi-tag-info">Relative brightness</span>
+            </div>
+          </div>
+
+          <!-- Temperature -->
+          <div class="kpi">
+            <div class="kpi-label">Temperature</div>
+            <div class="kpi-main">
+              <span class="kpi-value" id="temp-value">-</span>
+              <span class="kpi-unit">°C</span>
+            </div>
+            <div class="kpi-footer">
+              <span class="kpi-tag kpi-tag-info">Typical 20–35 °C</span>
+            </div>
+          </div>
+
+          <!-- Device state (pump + servo) -->
+          <div class="kpi kpi-device">
+            <div class="kpi-label">Device State</div>
+            <div class="device-state-row">
+              <span class="device-label">Pump</span>
+              <span id="pump-status" class="badge badge-neutral">-</span>
+            </div>
+            <div class="device-state-row">
+              <span class="device-label">Servo</span>
+              <span id="servo-status" class="badge badge-neutral">-</span>
+            </div>
+            <p class="last-update">Last sensor update: <span id="last-update">-</span></p>
+          </div>
+        </div>
+      </section>
+
+      <!-- History / chart card -->
+      <section class="card">
+        <div class="card-header">
+          <h2>Recent Readings</h2>
+          <p class="card-subtitle">Humidity trend (last samples)</p>
+        </div>
+        <div class="chart-wrapper">
+          <canvas id="chart-humidity" width="400" height="150"></canvas>
+          <p class="hint-text">You can plug Chart.js or custom JS here later.</p>
+        </div>
+      </section>
+    </section>
+
+    <!-- Right column -->
+    <section class="column">
+      <!-- Controls card -->
+      <section class="card">
+        <div class="card-header">
+          <h2>Manual Controls</h2>
+          <p class="card-subtitle">User actions override auto schedule</p>
+        </div>
+
+        <div class="controls-grid">
+          <!-- Pump control -->
+          <div class="control-block">
+            <div class="control-header">
+              <span class="control-title">Pump</span>
+              <span class="control-desc">Irrigation on/off</span>
+            </div>
+            <div class="btn-group">
+              <button class="btn btn-success" id="btn-pump-on">Turn ON</button>
+              <button class="btn btn-danger" id="btn-pump-off">Turn OFF</button>
+            </div>
+            <p class="hint-text">Manual ON/OFF is prioritized over schedule.</p>
+          </div>
+
+          <!-- Servo control -->
+          <div class="control-block">
+            <div class="control-header">
+              <span class="control-title">Servo Valve</span>
+              <span class="control-desc">Water flow opening</span>
+            </div>
+            <div class="btn-group">
+              <button class="btn" id="btn-servo-open">Open (Full)</button>
+              <button class="btn" id="btn-servo-half">Half</button>
+              <button class="btn" id="btn-servo-close">Close</button>
+            </div>
+            <p class="hint-text">Use for fine control of water output.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Schedule card -->
+      <section class="card">
+        <div class="card-header">
+          <h2>Watering Schedule</h2>
+          <p class="card-subtitle">Simple daily schedule with soil check</p>
+        </div>
+
+        <form id="schedule-form" class="form">
+          <div class="form-row toggle-row">
+            <label>
+              <input type="checkbox" id="sched-enabled">
+              <span>Enable automatic watering</span>
+            </label>
+            <span class="pill pill-soft small-pill">Prototype mode</span>
+          </div>
+
+          <div class="form-row">
+            <label for="sched-time">Time (HH:MM)</label>
+            <input type="time" id="sched-time" required>
+          </div>
+
+          <div class="form-row form-row-inline">
+            <div class="form-col">
+              <label for="sched-duration">Duration (seconds)</label>
+              <input type="number" id="sched-duration" min="5" step="5" value="30" required>
+            </div>
+            <div class="form-col">
+              <label for="sched-moisture">Moisture threshold (adc)</label>
+              <input type="number" id="sched-moisture" min="0" max="4095" value="300" required>
+            </div>
+          </div>
+
+          <div class="form-row form-actions">
+            <button type="submit" class="btn btn-primary">Save Schedule</button>
+          </div>
+        </form>
+      </section>
+
+      <!-- Logs card -->
+      <section class="card">
+        <div class="card-header">
+          <h2>System Logs</h2>
+          <p class="card-subtitle">Latest actuator & schedule events</p>
+        </div>
+
+        <div class="logs-wrapper">
+          <table class="log-table">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Pump</th>
+                <th>Servo</th>
+                <th>Source</th>
+                <th>Message</th>
+              </tr>
+            </thead>
+            <tbody id="logs-body">
+              <tr><td colspan="5" class="placeholder">No logs yet.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <span>Local dashboard · Designed for fast scanning · v0.1</span>
+  </footer>
+
+  <!-- JS -->
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/dashboard.js"></script>
+  <script src="js/schedule.js"></script>
+</body>
+</html>
