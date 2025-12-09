@@ -188,75 +188,90 @@ function setConnectionStatus(isConnected) {
 
 // ====================== HISTORY (CHART) ======================
 
+// ====================== HISTORY (CHART) ======================
+
 async function fetchHistory() {
-  const data = await fetchJSON("/api/history? limit=50");
+  const data = await fetchJSON("/api/history?limit=50");
   if (!data) return;
   updateHistoryChart(data);
 }
 
 function updateHistoryChart(history) {
-  const canvas = document.getElementById("sensor-chart"); // 🔥 Pastikan ID ini match dengan HTML
+  const canvas = document.getElementById("sensor-chart");
   if (!canvas || typeof Chart === "undefined") {
     console.warn("[CHART] Canvas not found or Chart.js not loaded");
     return;
   }
 
+  // history dari API kirim DESC, kita balik
   const sorted = [... history].reverse();
 
   const labels = sorted.map((row) => formatTimeLabel(row.timestamp || ""));
-  const tempData = sorted.map((row) => row.temperature ??  null);
-  const humData = sorted.map((row) => row.humidity ?? null);
-  const soilData = sorted.map((row) => row.soil_moisture ?? null);
-  const lightData = sorted.map((row) => row.light ??  null);
+  
+  // Raw data
+  const tempRaw = sorted.map((row) => row.temperature ??  null);
+  const humRaw = sorted.map((row) => row.humidity ?? null);
+  const soilRaw = sorted. map((row) => row.soil_moisture ?? null);
+  const lightRaw = sorted.map((row) => row.light ?? null);
+
+  // 🔥 NORMALIZE:  Scale each sensor to 0-100 based on its own min/max
+  const tempData = normalizeData(tempRaw, 0, 50);    // Temp range 0-50°C
+  const humData = normalizeData(humRaw, 0, 100);      // Humidity 0-100%
+  const soilData = normalizeData(soilRaw, 0, 4095);   // Soil ADC 0-4095
+  const lightData = normalizeData(lightRaw, 0, 4095); // Light ADC 0-4095
 
   const datasets = [
     {
-      label: "Temperature (°C)",
+      label:  "Temperature",
       data: tempData,
       borderColor: "rgb(255, 99, 132)",
       backgroundColor: "rgba(255, 99, 132, 0.1)",
       borderWidth: 2,
-      tension: 0.3,
-      yAxisID: "y1",
+      tension: 0.4,
+      pointRadius: 3,
+      pointHoverRadius:  5,
     },
     {
-      label: "Humidity (%)",
-      data: humData,
-      borderColor: "rgb(54, 162, 235)",
+      label:  "Humidity",
+      data:  humData,
+      borderColor:  "rgb(54, 162, 235)",
       backgroundColor: "rgba(54, 162, 235, 0.1)",
       borderWidth: 2,
-      tension: 0.3,
-      yAxisID: "y1",
+      tension: 0.4,
+      pointRadius: 3,
+      pointHoverRadius: 5,
     },
     {
-      label: "Soil Moisture (ADC)",
+      label: "Soil Moisture",
       data: soilData,
       borderColor: "rgb(75, 192, 192)",
       backgroundColor: "rgba(75, 192, 192, 0.1)",
       borderWidth: 2,
-      tension: 0.3,
-      yAxisID: "y2",
+      tension: 0.4,
+      pointRadius: 3,
+      pointHoverRadius: 5,
     },
     {
-      label: "Light (ADC)",
+      label: "Light Intensity",
       data: lightData,
       borderColor: "rgb(255, 205, 86)",
       backgroundColor: "rgba(255, 205, 86, 0.1)",
-      borderWidth: 1,
-      borderDash: [4, 4],
-      tension:  0.3,
-      yAxisID: "y2",
+      borderWidth: 2,
+      borderDash: [5, 3],
+      tension: 0.4,
+      pointRadius: 3,
+      pointHoverRadius: 5,
     },
   ];
 
   if (sensorChart) {
     // Update existing chart
-    sensorChart. data.labels = labels;
+    sensorChart.data.labels = labels;
     sensorChart.data.datasets = datasets;
     sensorChart.update();
   } else {
     // Create new chart
-    sensorChart = new Chart(canvas. getContext("2d"), {
+    sensorChart = new Chart(canvas.getContext("2d"), {
       type: "line",
       data: { labels, datasets },
       options: {
@@ -267,35 +282,104 @@ function updateHistoryChart(history) {
           intersect: false,
         },
         scales: {
-          y1: {
+          y:  {
             type: "linear",
-            position: "left",
-            title:  { display: true, text: "Temp (°C) / Humidity (%)" },
-            grid: { color: "rgba(255,255,255,0.1)" },
+            beginAtZero: true,
+            max: 100,
+            title:  { 
+              display: true, 
+              text: "Normalized Value (0-100)",
+              color: "rgba(255,255,255,0.7)",
+              font: { size: 12 }
+            },
+            grid: { 
+              color: "rgba(255,255,255,0.1)",
+              drawBorder: false,
+            },
+            ticks: {
+              color: "rgba(255,255,255,0.6)",
+              callback: function(value) {
+                return value + '%';
+              }
+            }
           },
-          y2: {
-            type: "linear",
-            position: "right",
-            grid: { drawOnChartArea: false },
-            title: { display: true, text: "Soil / Light (ADC)" },
-          },
+          x: {
+            grid: { 
+              color: "rgba(255,255,255,0.05)",
+              drawBorder: false,
+            },
+            ticks: {
+              color: "rgba(255,255,255,0.5)",
+              maxRotation: 45,
+              minRotation:  45,
+              font: { size: 9 }
+            }
+          }
         },
-        plugins:  {
+        plugins: {
           legend: {
             display: true,
             position: "top",
+            labels: {
+              color: "rgba(255,255,255,0.8)",
+              padding: 15,
+              font: { size: 11 },
+              usePointStyle: true,
+              pointStyle: "circle",
+            }
           },
-          tooltip: {
+          tooltip:  {
             enabled: true,
             mode: "index",
             intersect: false,
-          },
-        },
+            backgroundColor: "rgba(0,0,0,0.8)",
+            titleColor: "#fff",
+            bodyColor: "#fff",
+            borderColor: "rgba(255,255,255,0.2)",
+            borderWidth: 1,
+            padding: 12,
+            callbacks: {
+              // 🔥 Show ACTUAL values in tooltip, not normalized
+              label: function(context) {
+                const datasetLabel = context.dataset.label || '';
+                const index = context.dataIndex;
+                let actualValue;
+                let unit;
+                
+                if (datasetLabel. includes('Temperature')) {
+                  actualValue = tempRaw[index]?.toFixed(1);
+                  unit = '°C';
+                } else if (datasetLabel.includes('Humidity')) {
+                  actualValue = humRaw[index]?.toFixed(1);
+                  unit = '%';
+                } else if (datasetLabel.includes('Soil')) {
+                  actualValue = soilRaw[index]?. toFixed(0);
+                  unit = ' ADC';
+                } else if (datasetLabel.includes('Light')) {
+                  actualValue = lightRaw[index]?.toFixed(0);
+                  unit = ' ADC';
+                }
+                
+                const normalizedValue = context.parsed.y?. toFixed(0);
+                return `${datasetLabel}: ${actualValue}${unit} (${normalizedValue}%)`;
+              }
+            }
+          }
+        }
       },
     });
   }
 }
 
+// 🔥 NEW: Normalize data to 0-100 scale
+function normalizeData(data, minRange, maxRange) {
+  return data.map(value => {
+    if (value == null) return null;
+    // Scale to 0-100 based on expected range
+    const normalized = ((value - 0) / (maxRange - 0)) * 100;
+    return Math.max(0, Math.min(100, normalized)); // Clamp to 0-100
+  });
+}
 
 // ====================== LOGS ======================
 
