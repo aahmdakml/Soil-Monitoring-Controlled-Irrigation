@@ -37,14 +37,14 @@ function attachEventHandlers() {
 
   // Servo buttons
   const btnServoOpen = document.getElementById("btn-servo-open");
-  const btnServoHalf = document.getElementById("btn-servo-half");
+  const btnServoHalf = document. getElementById("btn-servo-half");
   const btnServoClose = document.getElementById("btn-servo-close");
   if (btnServoOpen) btnServoOpen.addEventListener("click", () => setServo("open"));
   if (btnServoHalf) btnServoHalf.addEventListener("click", () => setServo("half"));
   if (btnServoClose) btnServoClose.addEventListener("click", () => setServo("close"));
 
   // Schedule form
-  const scheduleForm = document.getElementById("schedule-form");
+  const scheduleForm = document. getElementById("schedule-form");
   if (scheduleForm) {
     scheduleForm.addEventListener("submit", (e) => {
       e.preventDefault();
@@ -72,12 +72,15 @@ async function fetchJSON(path, options = {}) {
     if (!res.ok) {
       console.error("API error", path, res.status);
       showToast(`API error ${res.status} on ${path}`, "error");
+      setConnectionStatus(false); // 🔥 UPDATE: Set disconnected on error
       return null;
     }
+    setConnectionStatus(true); // 🔥 UPDATE: Set connected on success
     return await res.json();
   } catch (err) {
     console.error("Network error", path, err);
     showToast(`Network error on ${path}`, "error");
+    setConnectionStatus(false); // 🔥 UPDATE: Set disconnected on network error
     return null;
   }
 }
@@ -86,7 +89,7 @@ async function fetchJSON(path, options = {}) {
 // ====================== STATUS ======================
 
 async function fetchStatus() {
-  console.log("[DASHBOARD] fetching /api/status ...");
+  console.log("[DASHBOARD] fetching /api/status .. .");
   const data = await fetchJSON("/api/status");
   console.log("[DASHBOARD] status response =", data);
   if (!data) return;
@@ -97,37 +100,53 @@ function updateStatusUI(status) {
   const sensor = status.sensor || {};
   const schedule = status.schedule || {};
 
-  // ---- KPI: sensor values ----
+  // ---- KPI:  sensor values ----
   setKpiValue("temp-value", sensor.temperature, 1);
   setKpiValue("humidity-value", sensor.humidity, 1);
   setKpiValue("soil-value", sensor.soil_moisture, 0);
   setKpiValue("light-value", sensor.light, 0);
 
-  // ---- Pump / Servo pills ----
-  updateStatusPill(
-    document.getElementById("pump-status-pill"),
-    status.pump_status === "on" ? "Pump ON" : "Pump OFF",
-    status.pump_status === "on"
-  );
+  // ---- Device State:  Pump & Servo ----
+  // 🔥 UPDATE: Handle null values, ambil dari status atau fallback ke "-"
+  const pumpStatus = status.pump_status || status.last_pump_status || "-";
+  const servoPosition = status. servo_position || status.last_servo_position || "-";
 
-  let servoLabel = "Servo Closed";
-  if (status.servo_position === "open") servoLabel = "Servo Open";
-  else if (status.servo_position === "half") servoLabel = "Servo Half";
+  const pumpEl = document.getElementById("pump-status");
+  if (pumpEl) {
+    pumpEl.textContent = pumpStatus === "-" ? "-" : pumpStatus. toUpperCase();
+    pumpEl.className = "badge";
+    if (pumpStatus === "on") {
+      pumpEl.classList.add("badge-success");
+    } else if (pumpStatus === "off") {
+      pumpEl.classList.add("badge-neutral");
+    } else {
+      pumpEl. classList.add("badge-neutral");
+    }
+  }
 
-  updateStatusPill(
-    document.getElementById("servo-status-pill"),
-    servoLabel,
-    status.servo_position !== "close"
-  );
+  const servoEl = document. getElementById("servo-status");
+  if (servoEl) {
+    servoEl.textContent = servoPosition === "-" ? "-" : servoPosition;
+    servoEl.className = "badge";
+    if (servoPosition === "open") {
+      servoEl.classList.add("badge-success");
+    } else if (servoPosition === "half") {
+      servoEl.classList.add("badge-warning");
+    } else if (servoPosition === "close") {
+      servoEl.classList.add("badge-neutral");
+    } else {
+      servoEl.classList.add("badge-neutral");
+    }
+  }
 
   // ---- Last update time ----
   const ts = sensor.timestamp;
   const lastEl = document.getElementById("last-update");
   if (lastEl) {
-    lastEl.textContent = ts ? formatTimestampShort(ts) : "—";
+    lastEl.textContent = ts ?  formatTimestampShort(ts) : "—";
   }
 
-  // ---- Schedule summary ----
+  // ---- Schedule summary ---- (jika ada element schedule-summary)
   const schedEl = document.getElementById("schedule-summary");
   if (schedEl && schedule) {
     if (schedule.enabled) {
@@ -143,7 +162,7 @@ function updateStatusUI(status) {
 
 function setKpiValue(elementId, value, digits = 0) {
   const el = document.getElementById(elementId);
-  if (!el) return;
+  if (! el) return;
   if (value == null || Number.isNaN(value)) {
     el.textContent = "-";
   } else {
@@ -151,97 +170,95 @@ function setKpiValue(elementId, value, digits = 0) {
   }
 }
 
-function updateStatusPill(el, label, isActive) {
-  if (!el) return;
-  el.textContent = label;
-  el.classList.toggle("pill-on", isActive);
-  el.classList.toggle("pill-off", !isActive);
-}
-
+// 🔥 UPDATE: Fix connection status to use correct element
 function setConnectionStatus(isConnected) {
-  const container = document.querySelector(".connection-indicator");
-  const textEl = document.getElementById("connection-text");
-
-  if (!container || !textEl) return;
+  const statusEl = document.getElementById("backend-status");
+  if (!statusEl) return;
 
   if (isConnected) {
-    container.classList.add("connected");
-    container.classList.remove("disconnected");
-    textEl.textContent = "Connected";
+    statusEl.textContent = "● Connected";
+    statusEl.classList.remove("pill-soft");
+    statusEl.classList.add("pill-success");
   } else {
-    container.classList.add("disconnected");
-    container.classList.remove("connected");
-    textEl.textContent = "Disconnected";
+    statusEl.textContent = "● Disconnected";
+    statusEl.classList.remove("pill-success");
+    statusEl.classList.add("pill-soft");
   }
 }
 
 // ====================== HISTORY (CHART) ======================
 
 async function fetchHistory() {
-  const data = await fetchJSON("/api/history?limit=50");
+  const data = await fetchJSON("/api/history? limit=50");
   if (!data) return;
   updateHistoryChart(data);
 }
 
 function updateHistoryChart(history) {
-  const canvas = document.getElementById("sensor-chart");
+  const canvas = document.getElementById("sensor-chart"); // 🔥 Pastikan ID ini match dengan HTML
   if (!canvas || typeof Chart === "undefined") {
-    // Chart.js tidak ada / canvas tidak ditemukan
+    console.warn("[CHART] Canvas not found or Chart.js not loaded");
     return;
   }
 
-  // history dari API kirim DESC, kita balik
-  const sorted = [...history].reverse();
+  const sorted = [... history].reverse();
 
   const labels = sorted.map((row) => formatTimeLabel(row.timestamp || ""));
-  const tempData = sorted.map((row) => row.temperature ?? null);
+  const tempData = sorted.map((row) => row.temperature ??  null);
   const humData = sorted.map((row) => row.humidity ?? null);
   const soilData = sorted.map((row) => row.soil_moisture ?? null);
-  const lightData = sorted.map((row) => row.light ?? null);
+  const lightData = sorted.map((row) => row.light ??  null);
 
   const datasets = [
     {
       label: "Temperature (°C)",
       data: tempData,
+      borderColor: "rgb(255, 99, 132)",
+      backgroundColor: "rgba(255, 99, 132, 0.1)",
       borderWidth: 2,
-      tension: 0.2,
+      tension: 0.3,
       yAxisID: "y1",
     },
     {
       label: "Humidity (%)",
       data: humData,
+      borderColor: "rgb(54, 162, 235)",
+      backgroundColor: "rgba(54, 162, 235, 0.1)",
       borderWidth: 2,
-      tension: 0.2,
+      tension: 0.3,
       yAxisID: "y1",
     },
     {
-      label: "Soil Moisture",
+      label: "Soil Moisture (ADC)",
       data: soilData,
+      borderColor: "rgb(75, 192, 192)",
+      backgroundColor: "rgba(75, 192, 192, 0.1)",
       borderWidth: 2,
-      tension: 0.2,
+      tension: 0.3,
       yAxisID: "y2",
     },
     {
-      label: "Light",
+      label: "Light (ADC)",
       data: lightData,
+      borderColor: "rgb(255, 205, 86)",
+      backgroundColor: "rgba(255, 205, 86, 0.1)",
       borderWidth: 1,
       borderDash: [4, 4],
-      tension: 0.2,
+      tension:  0.3,
       yAxisID: "y2",
     },
   ];
 
   if (sensorChart) {
-    sensorChart.data.labels = labels;
+    // Update existing chart
+    sensorChart. data.labels = labels;
     sensorChart.data.datasets = datasets;
     sensorChart.update();
   } else {
-    sensorChart = new Chart(canvas.getContext("2d"), {
+    // Create new chart
+    sensorChart = new Chart(canvas. getContext("2d"), {
       type: "line",
-      data: {
-        labels,
-        datasets,
-      },
+      data: { labels, datasets },
       options: {
         responsive: true,
         maintainAspectRatio: false,
@@ -253,18 +270,25 @@ function updateHistoryChart(history) {
           y1: {
             type: "linear",
             position: "left",
-            title: { display: true, text: "Temp / Humidity" },
+            title:  { display: true, text: "Temp (°C) / Humidity (%)" },
+            grid: { color: "rgba(255,255,255,0.1)" },
           },
           y2: {
             type: "linear",
             position: "right",
             grid: { drawOnChartArea: false },
-            title: { display: true, text: "Soil / Light (raw)" },
+            title: { display: true, text: "Soil / Light (ADC)" },
           },
         },
-        plugins: {
+        plugins:  {
           legend: {
             display: true,
+            position: "top",
+          },
+          tooltip: {
+            enabled: true,
+            mode: "index",
+            intersect: false,
           },
         },
       },
@@ -282,10 +306,21 @@ async function fetchLogs() {
 }
 
 function updateLogsTable(logs) {
-  const tbody = document.getElementById("logs-tbody");
+  const tbody = document.getElementById("logs-body");
   if (!tbody) return;
 
   tbody.innerHTML = "";
+
+  if (! logs || logs.length === 0) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 5;
+    td.className = "placeholder";
+    td.textContent = "No logs yet. ";
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+    return;
+  }
 
   logs.forEach((log) => {
     const tr = document.createElement("tr");
@@ -294,17 +329,17 @@ function updateLogsTable(logs) {
     tdTime.textContent = formatTimestampShort(log.timestamp);
     tr.appendChild(tdTime);
 
-    const tdSource = document.createElement("td");
-    tdSource.textContent = log.source || "-";
-    tr.appendChild(tdSource);
-
     const tdPump = document.createElement("td");
-    tdPump.textContent = log.pump_status ?? "—";
+    tdPump.textContent = log.pump_status ??  "—";
     tr.appendChild(tdPump);
 
     const tdServo = document.createElement("td");
-    tdServo.textContent = log.servo_position ?? "—";
+    tdServo.textContent = log.servo_position ??  "—";
     tr.appendChild(tdServo);
+
+    const tdSource = document.createElement("td");
+    tdSource.textContent = log.source || "-";
+    tr.appendChild(tdSource);
 
     const tdMsg = document.createElement("td");
     tdMsg.textContent = log.message || "";
@@ -318,7 +353,7 @@ function updateLogsTable(logs) {
 // ====================== PUMP / SERVO CONTROL ======================
 
 async function setPump(status) {
-  showToast(`Sending pump ${status.toUpperCase()}...`, "info");
+  showToast(`Sending pump ${status. toUpperCase()}... `, "info");
   const res = await fetchJSON("/api/pump", {
     method: "POST",
     body: JSON.stringify({ status }),
@@ -331,7 +366,7 @@ async function setPump(status) {
 }
 
 async function setServo(position) {
-  showToast(`Moving servo to ${position}...`, "info");
+  showToast(`Moving servo to ${position}... `, "info");
   const res = await fetchJSON("/api/servo", {
     method: "POST",
     body: JSON.stringify({ position }),
@@ -353,26 +388,26 @@ async function fetchSchedule() {
 }
 
 function fillScheduleForm(sched) {
-  const enabledEl = document.getElementById("schedule-enabled");
-  const timeEl = document.getElementById("schedule-time");
-  const durEl = document.getElementById("schedule-duration");
-  const thrEl = document.getElementById("schedule-threshold");
+  const enabledEl = document.getElementById("sched-enabled");
+  const timeEl = document.getElementById("sched-time");
+  const durEl = document.getElementById("sched-duration");
+  const thrEl = document.getElementById("sched-moisture");
 
   if (enabledEl) enabledEl.checked = !!sched.enabled;
   if (timeEl && sched.time_hhmm) timeEl.value = sched.time_hhmm;
   if (durEl && sched.duration_seconds != null) durEl.value = sched.duration_seconds;
-  if (thrEl && sched.moisture_threshold != null) thrEl.value = sched.moisture_threshold;
+  if (thrEl && sched. moisture_threshold != null) thrEl.value = sched.moisture_threshold;
 }
 
 async function saveScheduleFromForm() {
-  const enabledEl = document.getElementById("schedule-enabled");
-  const timeEl = document.getElementById("schedule-time");
-  const durEl = document.getElementById("schedule-duration");
-  const thrEl = document.getElementById("schedule-threshold");
+  const enabledEl = document.getElementById("sched-enabled");
+  const timeEl = document.getElementById("sched-time");
+  const durEl = document.getElementById("sched-duration");
+  const thrEl = document.getElementById("sched-moisture");
 
   const payload = {
-    enabled: enabledEl ? enabledEl.checked : false,
-    time_hhmm: timeEl ? timeEl.value || "06:00" : "06:00",
+    enabled: enabledEl ?  enabledEl.checked : false,
+    time_hhmm: timeEl ?  timeEl.value || "06:00" : "06:00",
     duration_seconds: durEl ? Number(durEl.value || 30) : 30,
     moisture_threshold: thrEl ? Number(thrEl.value || 300) : 300,
   };
@@ -393,12 +428,12 @@ async function saveScheduleFromForm() {
 // ====================== UTILITIES ======================
 
 function formatTimestampShort(ts) {
-  if (!ts) return "—";
-  // backend default: "YYYY-MM-DD HH:MM:SS"
-  const d = new Date(ts.replace(" ", "T"));
+  if (! ts) return "—";
+  // backend default:  "YYYY-MM-DD HH: MM: SS"
+  const d = new Date(ts. replace(" ", "T"));
   if (Number.isNaN(d.getTime())) return ts; // fallback
   const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
+  const mm = String(d. getMinutes()).padStart(2, "0");
   const ss = String(d.getSeconds()).padStart(2, "0");
   return `${hh}:${mm}:${ss}`;
 }

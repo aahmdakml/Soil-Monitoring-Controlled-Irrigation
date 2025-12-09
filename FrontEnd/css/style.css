@@ -111,6 +111,7 @@ body {
 }
 
 .pill.small-pill {
+  
   font-size: 0.75rem;
   padding: 2px 8px;
 }
@@ -263,6 +264,17 @@ body {
   display: grid;
   grid-template-columns: 1fr;
   gap: 10px;
+}
+
+.chart-wrapper {
+  position: relative;
+  height:  300px; /* atau sesuaikan */
+  width: 100%;
+  padding: 1rem;
+}
+
+.chart-wrapper canvas {
+  max-height: 100%;
 }
 
 @media (min-width: 700px) {
